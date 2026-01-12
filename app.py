@@ -11,7 +11,7 @@ import requests
 # -------------------------
 # Page config
 # -------------------------
-st.set_page_config(page_title="Clinical Validation – US + Mask + Prompt", layout="wide")
+st.set_page_config(page_title="US Clinical Validation", layout="wide")
 
 # -------------------------
 # Paths
@@ -371,3 +371,4 @@ st.markdown(
 - **Overall Realism:** Does the image look like a real ultrasound? No obvious synthetic artifacts?
 """
 )
+
