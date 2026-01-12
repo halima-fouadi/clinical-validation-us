@@ -62,7 +62,7 @@ def ensure_data_present():
 
     url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
     st.info("Downloading dataset from Google Drive...")
-    gdown.download(url, DATA_ZIP, quiet=False)
+    gdown.download(url, DATA_ZIP, quiet=False, fuzzy=True, use_cookies=False)
 
     st.info("Extracting dataset...")
     with zipfile.ZipFile(DATA_ZIP, "r") as z:
