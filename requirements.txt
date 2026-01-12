@@ -1,0 +1,8 @@
+streamlit
+pandas
+pillow
+numpy
+opencv-python
+openpyxl
+gdown
+openpyxl
