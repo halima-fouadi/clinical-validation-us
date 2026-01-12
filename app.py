@@ -6,19 +6,12 @@ import datetime
 import pandas as pd
 import streamlit as st
 from PIL import Image
-import gdown
+import requests
 
 # -------------------------
 # Page config
 # -------------------------
 st.set_page_config(page_title="Clinical Validation – US + Mask + Prompt", layout="wide")
-
-# -------------------------
-# Google Drive dataset settings
-# -------------------------
-# Lien Drive: https://drive.google.com/file/d/FILE_ID/view
-GDRIVE_FILE_ID = "PUT_YOUR_FILE_ID_HERE"
-DATA_ZIP = "data.zip"
 
 # -------------------------
 # Paths
@@ -31,6 +24,12 @@ META_XLSX = os.path.join(DATA_DIR, "metadata.xlsx")
 OUT_DIR = "outputs"
 OUT_CSV = os.path.join(OUT_DIR, "clinical_validation_scores.csv")
 os.makedirs(OUT_DIR, exist_ok=True)
+
+# -------------------------
+# Dataset from GitHub Release (DIRECT LINK)
+# -------------------------
+DATA_ZIP_URL = "https://github.com/halima-fouadi/clinical-validation-us/releases/download/v1.0-data/data.zip"
+DATA_ZIP = "data.zip"
 
 # -------------------------
 # Criteria
@@ -50,23 +49,45 @@ CRITERIA = [
 # Helpers
 # -------------------------
 def ensure_data_present():
-    """Download & extract data.zip from Google Drive if data/images is missing/empty."""
+    """Download & extract data.zip from GitHub Release if data/images is missing/empty."""
     if os.path.exists(IMG_DIR) and len(glob.glob(os.path.join(IMG_DIR, "*"))) > 0:
         return
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    if GDRIVE_FILE_ID.strip() == "" or GDRIVE_FILE_ID == "16NoEg5yWvKBhzouTAmhN33JU95jFKZJT":
-        st.error("Please set GDRIVE_FILE_ID at the top of app.py (Google Drive file id).")
+    st.info("Downloading dataset from GitHub Release...")
+
+    try:
+        r = requests.get(DATA_ZIP_URL, stream=True, timeout=180)
+    except Exception as e:
+        st.error(f"Download error: {e}")
         st.stop()
 
-    url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
-    st.info("Downloading dataset from Google Drive...")
-    gdown.download(url, DATA_ZIP, quiet=False, fuzzy=True, use_cookies=False)
+    if r.status_code != 200:
+        st.error(f"Failed to download data.zip (HTTP {r.status_code}). "
+                 f"Check that data.zip exists in Release Assets.\nURL: {DATA_ZIP_URL}")
+        st.stop()
+
+    total_bytes = 0
+    with open(DATA_ZIP, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                f.write(chunk)
+                total_bytes += len(chunk)
+
+    if total_bytes < 1024 * 1024:  # < 1MB: likely an HTML error page
+        st.error("Downloaded file is too small. It may be an HTML page, not the zip. "
+                 "Please verify Release Assets contains data.zip.")
+        st.stop()
 
     st.info("Extracting dataset...")
-    with zipfile.ZipFile(DATA_ZIP, "r") as z:
-        z.extractall(".")  # expects zip contains data/...
+    try:
+        with zipfile.ZipFile(DATA_ZIP, "r") as z:
+            z.extractall(".")  # expects zip contains data/...
+    except Exception as e:
+        st.error(f"Zip extraction failed: {e}. Make sure zip contains a top folder named 'data/'.")
+        st.stop()
+
     st.success("Dataset ready ✅")
 
 def list_images(folder):
@@ -147,19 +168,14 @@ def get_resume_index_after_last_case(reviewer_id, image_paths, results_csv):
     if df_r.empty:
         return 0
 
-    # sort by timestamp, take most recent
-    # timestamps were saved as ISO strings -> lexicographic sort works
     df_r = df_r.sort_values("timestamp", ascending=True)
     last_image = str(df_r.iloc[-1]["image_name"])
 
-    # find its index in the ordered list, then go to next
     names = [os.path.basename(p) for p in image_paths]
     if last_image in names:
         last_idx = names.index(last_image)
-        next_idx = min(last_idx + 1, len(image_paths) - 1)
-        return next_idx
+        return min(last_idx + 1, len(image_paths) - 1)
 
-    # if not found (file renamed) -> start at 0
     return 0
 
 # -------------------------
@@ -172,7 +188,7 @@ ensure_data_present()
 # -------------------------
 image_paths = list_images(IMG_DIR)
 if not image_paths:
-    st.error("No images found in data/images/")
+    st.error("No images found in data/images/. Check that data.zip extracted correctly.")
     st.stop()
 
 meta_df = load_metadata_xlsx(META_XLSX)
