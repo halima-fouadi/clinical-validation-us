@@ -11,7 +11,7 @@ import requests
 # -------------------------
 # Page config
 # -------------------------
-st.set_page_config(page_title="US Clinical Validation", layout="wide")
+st.set_page_config(page_title="🩺 Radiologist Clinical Validation – Synthetic Breast Ultrasound", layout="wide")
 
 # -------------------------
 # Paths
@@ -371,4 +371,5 @@ st.markdown(
 - **Overall Realism:** Does the image look like a real ultrasound? No obvious synthetic artifacts?
 """
 )
+
 
