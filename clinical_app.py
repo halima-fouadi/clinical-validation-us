@@ -224,7 +224,7 @@ if reviewer and os.path.exists(OUT_CSV):
 # -------------------------
 clamp_idx(image_paths)
 
-st.title("🩺 Clinical Validation – Ultrasound + Mask + Prompt")
+st.title("🩺 Radiologist Clinical Validation – Synthetic Breast Ultrasound")
 
 nav1, nav2, nav3, nav4 = st.columns([1, 1, 2, 1])
 with nav1:
@@ -371,5 +371,6 @@ st.markdown(
 - **Overall Realism:** Does the image look like a real ultrasound? No obvious synthetic artifacts?
 """
 )
+
 
 
