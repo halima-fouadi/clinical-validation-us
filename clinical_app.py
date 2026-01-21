@@ -277,7 +277,7 @@ with col2:
         st.warning("No mask found (expected case_tumor_XXXX.* in data/masks).")
 
 with col3:
-    st.subheader("Prompt (from metadata.xlsx)")
+    st.subheader("Prompt")
     st.text_area("Prompt", prompt, height=220, disabled=True)
 
 # -------------------------
@@ -371,6 +371,7 @@ st.markdown(
 - **Overall Realism:** Does the image look like a real ultrasound? No obvious synthetic artifacts?
 """
 )
+
 
 
 
