@@ -298,8 +298,8 @@ st.markdown(f"### ✅ Total Score: **{total} / 40**")
 
 comment = st.text_area("Comments (optional)", key=f"{reviewer}_{image_name}_comment", height=120)
 decision = st.selectbox(
-    "Decision (optional)",
-    ["", "Reject", "Needs minor revision", "Acceptable for AI training", "Excellent / Highly realistic"],
+    "Decision (Mandatory)",
+    ["", "Not acceptable", "Acceptable with limitations", "Clinically acceptable", "Clinically excellent"],
     key=f"{reviewer}_{image_name}_decision"
 )
 
@@ -355,10 +355,10 @@ st.markdown(
 - **5 – Excellent:** Perfectly realistic, matches real ultrasound  
 
 **Total Score Interpretation:**  
-- **0–15:** Reject (image not realistic enough)  
-- **16–27:** Needs minor revision  
-- **28–35:** Acceptable for AI training  
-- **36–40:** Excellent / Highly realistic synthetic image  
+- Not acceptable
+- Acceptable with limitations
+- Clinically acceptable
+- Clinically excellent
 
 **Validation Criteria Interpretation:**  
 - **Lesion Shape Accuracy:** Does the lesion shape match the intended type (round, oval, irregular) and BI-RADS description?  
@@ -371,6 +371,7 @@ st.markdown(
 - **Overall Realism:** Does the image look like a real ultrasound? No obvious synthetic artifacts?
 """
 )
+
 
 
 
