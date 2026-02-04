@@ -1,4 +1,3 @@
-
 import os
 import re
 import glob
@@ -13,6 +12,7 @@ import requests
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+
 
 # -------------------------
 # Page config
@@ -191,37 +191,58 @@ def get_resume_index_after_last_case(reviewer_id, image_paths, results_csv):
     return 0
 
 # -------------------------
-# Google Drive auto-backup helpers
+# Google Drive auto-backup helpers (FIXED + DEBUG)
 # -------------------------
+def _service_account_info_from_secrets() -> dict:
+    """
+    Streamlit secrets returns a dict-like object.
+    We convert it to a plain dict and ensure private_key has proper newlines.
+    """
+    if "google" not in st.secrets:
+        raise RuntimeError("Missing [google] section in Streamlit Secrets.")
+
+    info = dict(st.secrets["google"])
+
+    # Ensure newline formatting (some users paste with literal \n)
+    pk = info.get("private_key", "")
+    if "\\n" in pk and "\n" not in pk:
+        info["private_key"] = pk.replace("\\n", "\n")
+
+    # Optional sanity checks
+    required_keys = ["type", "project_id", "private_key_id", "private_key", "client_email", "token_uri"]
+    missing = [k for k in required_keys if k not in info or not str(info.get(k, "")).strip()]
+    if missing:
+        raise RuntimeError(f"Secrets [google] missing keys: {missing}")
+
+    return info
+
 def get_drive_service():
-    """
-    Requires Streamlit secrets:
-    [google]  -> service account JSON fields
-    [gdrive]  -> folder_id
-    """
-    sa_info = dict(st.secrets["google"])
+    sa_info = _service_account_info_from_secrets()
     creds = Credentials.from_service_account_info(
         sa_info,
         scopes=["https://www.googleapis.com/auth/drive"]
     )
     return build("drive", "v3", credentials=creds)
 
-def find_file_in_folder(service, folder_id, filename):
-    q = f"'{folder_id}' in parents and name='{filename}' and trashed=false"
-    res = service.files().list(q=q, fields="files(id, name)").execute()
-    files = res.get("files", [])
-    return files[0]["id"] if files else None
-
 def upload_or_update_file(service, folder_id, local_path, drive_filename, mime_type):
-    file_id = find_file_in_folder(service, folder_id, drive_filename)
+    if not folder_id:
+        raise RuntimeError("Missing [gdrive].folder_id in Streamlit Secrets.")
+    if not os.path.exists(local_path):
+        raise RuntimeError(f"Local file not found: {local_path}")
+
+    query = f"name='{drive_filename}' and '{folder_id}' in parents and trashed=false"
+    results = service.files().list(q=query, fields="files(id)").execute()
+    files = results.get("files", [])
+
     media = MediaFileUpload(local_path, mimetype=mime_type, resumable=True)
 
-    if file_id:
+    if files:
+        file_id = files[0]["id"]
         service.files().update(fileId=file_id, media_body=media).execute()
         return "updated"
     else:
-        meta = {"name": drive_filename, "parents": [folder_id]}
-        service.files().create(body=meta, media_body=media, fields="id").execute()
+        file_metadata = {"name": drive_filename, "parents": [folder_id]}
+        service.files().create(body=file_metadata, media_body=media, fields="id").execute()
         return "created"
 
 def backup_results_to_drive(reviewer_id: str):
@@ -237,7 +258,10 @@ def backup_results_to_drive(reviewer_id: str):
     df = pd.read_csv(OUT_CSV)
     df.to_excel(OUT_XLSX, index=False)
 
-    folder_id = st.secrets["gdrive"]["folder_id"]
+    if "gdrive" not in st.secrets or "folder_id" not in st.secrets["gdrive"]:
+        raise RuntimeError("Missing [gdrive].folder_id in Streamlit Secrets.")
+
+    folder_id = str(st.secrets["gdrive"]["folder_id"]).strip()
     service = get_drive_service()
 
     safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", (reviewer_id or "unknown").strip())
@@ -250,6 +274,29 @@ def backup_results_to_drive(reviewer_id: str):
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     return status_csv, status_xlsx
+
+def drive_debug_test():
+    """
+    Creates and uploads a tiny text file to confirm that Drive upload works.
+    """
+    if "gdrive" not in st.secrets or "folder_id" not in st.secrets["gdrive"]:
+        raise RuntimeError("Missing [gdrive].folder_id in Streamlit Secrets.")
+
+    folder_id = str(st.secrets["gdrive"]["folder_id"]).strip()
+    service = get_drive_service()
+
+    test_path = os.path.join(OUT_DIR, "STREAMLIT_DRIVE_TEST.txt")
+    with open(test_path, "w", encoding="utf-8") as f:
+        f.write(f"Drive test OK: {datetime.datetime.now().isoformat()}")
+
+    status = upload_or_update_file(
+        service,
+        folder_id,
+        test_path,
+        drive_filename="STREAMLIT_DRIVE_TEST.txt",
+        mime_type="text/plain"
+    )
+    return status
 
 # -------------------------
 # Ensure dataset exists
@@ -268,10 +315,20 @@ meta_df = load_metadata_xlsx(META_XLSX)
 prompt_by_case = {row["case_id"]: build_prompt(row) for _, row in meta_df.iterrows()}
 
 # -------------------------
-# Sidebar (reviewer)
+# Sidebar (reviewer + Drive debug)
 # -------------------------
 st.sidebar.header("Reviewer")
 reviewer = st.sidebar.text_input("Reviewer name / ID", value="")
+
+st.sidebar.divider()
+st.sidebar.subheader("🔧 Google Drive Debug")
+if st.sidebar.button("Test Drive Upload"):
+    try:
+        status = drive_debug_test()
+        st.sidebar.success(f"✅ Drive test success ({status}). Check Drive for STREAMLIT_DRIVE_TEST.txt")
+    except Exception as e:
+        st.sidebar.error("❌ Drive test failed. Details:")
+        st.sidebar.exception(e)
 
 if "idx" not in st.session_state:
     st.session_state.idx = 0
@@ -374,7 +431,7 @@ decision = st.selectbox(
 )
 
 # -------------------------
-# Save evaluation -> auto NEXT + auto Google Drive backup
+# Save evaluation -> auto NEXT + auto Google Drive backup (WITH REAL ERROR DISPLAY)
 # -------------------------
 if st.button("💾 Save evaluation"):
     row = {
@@ -397,9 +454,10 @@ if st.button("💾 Save evaluation"):
     # Auto-backup to Google Drive
     try:
         s1, s2 = backup_results_to_drive(reviewer)
-        st.info(f"Auto-save to Google Drive ✅ (CSV: {s1}, XLSX: {s2})")
+        st.success(f"Auto-save to Google Drive ✅ (CSV: {s1}, XLSX: {s2})")
     except Exception as e:
-        st.warning(f"Google Drive auto-save failed (saved locally anyway): {e}")
+        st.error("Google Drive auto-save failed ❌ (details below)")
+        st.exception(e)
 
     # automatically go to next case
     st.session_state.idx += 1
@@ -411,7 +469,7 @@ if st.button("💾 Save evaluation"):
 # -------------------------
 st.divider()
 st.subheader("📊 Saved evaluations (preview)")
-if os.path.exists(OUT_CSV):
+if os.path.exists(If OUT_CSV):
     st.dataframe(pd.read_csv(OUT_CSV), use_container_width=True)
 else:
     st.write("No evaluations saved yet.")
