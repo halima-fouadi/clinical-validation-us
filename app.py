@@ -469,7 +469,7 @@ if st.button("💾 Save evaluation"):
 # -------------------------
 st.divider()
 st.subheader("📊 Saved evaluations (preview)")
-if os.path.exists(If OUT_CSV):
+if os.path.exists(OUT_CSV):
     st.dataframe(pd.read_csv(OUT_CSV), use_container_width=True)
 else:
     st.write("No evaluations saved yet.")
